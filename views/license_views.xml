@@ -1,56 +1,119 @@
 <odoo>
-  <!-- Form View -->
-  <record id="view_device_license_form" model="ir.ui.view">
-    <field name="name">device.license.form</field>
-    <field name="model">device.license</field>
-    <field name="arch" type="xml">
-      <form>
-        <header>
-          <button name="action_generate_password" type="object" string="Generate Password" class="btn-primary" />
-        </header>
-        <sheet>
-          <group>
-            <field name="name"/>
-            <field name="key"/>
-            <field name="password" password="True"/>
-            <field name="state"/>
-            <field name="create_date" readonly="1"/>
-            <field name="activation_date" />
-            <field name="expired_date" />
-            <field name="device_code" readonly="1"/>
-            <field name="device_name"/>
-            <field name="device_info" readonly="1"/>
-            <field name="user_id"/>
-          </group>
-        </sheet>
-      </form>
-    </field>
-  </record>
+  <data>
+    <!-- FORM VIEW -->
+    <record id="view_license_license_form" model="ir.ui.view">
+      <field name="name">license.license.form</field>
+      <field name="model">license.license</field>
+      <field name="priority" eval="20"/>
+      <field name="arch" type="xml">
+        <form string="License">
+          <header>
+            <button name="action_assign"   
+                    type="object" 
+                    string="Assign"   
+                    class="btn-primary"
+                    invisible="state != 'draft'"/>
+            <button name="action_activate" 
+                    type="object" 
+                    string="Activate" 
+                    class="btn-primary"
+                    invisible="state != 'assigned'"/>
+            <button name="action_reset"    
+                    type="object" 
+                    string="Reset"
+                    invisible="state != 'active'"/>
+            <button name="action_disable"  
+                    type="object" 
+                    string="Disable"
+                    invisible="state != 'active'"/>
+            <button name="action_enable"   
+                    type="object" 
+                    string="Enable"   
+                    class="btn-primary"
+                    invisible="state != 'disabled'"/>
+            <button name="action_cancel"   
+                    type="object" 
+                    string="Cancel"
+                    invisible="not (state == 'active' or state == 'disabled')"/>
+            <button name="action_draft"    
+                    type="object" 
+                    string="Set to Draft"
+                    invisible="not (state == 'assigned' or state == 'cancelled')"/>
+            <field name="state" 
+                   widget="statusbar"
+                   statusbar_visible="draft,assigned,active,disabled,cancelled"/>
+          </header>
+          <sheet>
+            <group>
+              <field name="name" readonly="not (state in ['draft','assigned'])"/>
+            </group>
+            <group>
+              <field name="key" readonly="1"/>
+            </group>
+            <group>
+              <!-- <group>
+                <field name="product_id" readonly="not (state in ['draft','assigned'])"/>
+                <field name="type_id"    readonly="not (state in ['draft','assigned'])"/>
+              </group> -->
+              <group>
+                <field name="partner_id" readonly="not (state in ['draft','assigned'])"/>
+                <field name="date_start"  readonly="state != 'assigned'"/>
+                <field name="runtime"     readonly="state != 'draft'"/>
+                <field name="date_end"    readonly="state != 'active'"/>
+              </group>
+              <group>
+                <field name="device_code"/>
+                <field name="device_name"/>
+                <field name="password" password="1"/>
+              </group>
+            </group>
+          </sheet>
+        </form>
+      </field>
+    </record>
 
-  <!-- Tree View -->
-  <record id="view_device_license_tree" model="ir.ui.view">
-    <field name="name">device.license.tree</field>
-    <field name="model">device.license</field>
-    <field name="arch" type="xml">
-      <tree>
-        <field name="key" string="License Key"/>
-        <field name="create_date" string="Ngày tạo"/>
-        <field name="activation_date" string="Ngày kích hoạt"/>
-        <field name="expired_date" string="Ngày hết hạn"/>
-        <field name="device_code" string="Mã thiết bị"/>
-        <field name="device_name" string="Tên thiết bị"/>
-      </tree>
-    </field>
-  </record>
+    <!-- TREE VIEW -->
+    <record id="view_license_license_tree" model="ir.ui.view">
+      <field name="name">license.license.tree</field>
+      <field name="model">license.license</field>
+      <field name="priority" eval="10"/>
+      <field name="arch" type="xml">
+        <tree>
+          <field name="name"/>
+          <field name="key"/>
+          <field name="date_start"/>
+          <field name="date_end"/>
+          <field name="runtime"/>
+          <!-- <field name="product_id"/> -->
+          <!-- <field name="partner_id"/> -->
+          <field name="state" widget="badge"
+                 decoration-success="state in ['assigned','active']"
+                 decoration-info="state == 'draft'"
+                 decoration-danger="state == 'disabled'"
+                 decoration-muted="state == 'cancelled'"/>
+        </tree>
+      </field>
+    </record>
 
-  <!-- Action -->
-  <record id="action_device_license" model="ir.actions.act_window">
-    <field name="name">Device Licenses</field>
-    <field name="res_model">device.license</field>
-    <field name="view_mode">tree,form</field>
-    <field name="view_id" ref="view_device_license_tree"/>
-  </record>
+    <!-- ACTION -->
+    <record id="action_license_license" model="ir.actions.act_window">
+      <field name="name">Licenses</field>
+      <field name="res_model">license.license</field>
+      <field name="view_mode">tree,form</field>
+      <field name="views" eval="[
+          (ref('view_license_license_tree'), 'tree'),
+          (ref('view_license_license_form'), 'form')
+      ]"/>
+    </record>
 
-  <!-- Menu -->
-  <menuitem id="menu_device_license_action" name="Manage Licenses" action="action_device_license" sequence="1" />
+    <!-- MENU -->
+    <menuitem id="menu_license_root"     
+              name="License"
+    />
+    <menuitem id="menu_license_licenses" 
+              parent="menu_license_root"
+              action="action_license_license"
+    />
+
+  </data>
 </odoo>

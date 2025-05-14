@@ -2,7 +2,7 @@
     'name': 'License Management',
     'version': '1.0',
     'category': 'License',
-    'depends': ['base', 'mail'],
+    'depends': ['base', 'mail', "product"],
     'data': [   
         'security/ir.model.access.csv',
         'views/license_views.xml',

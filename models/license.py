@@ -1,72 +1,156 @@
-from odoo import models, fields, api
-from datetime import datetime
-import hashlib
+import uuid
+import re
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
+from odoo.tools import date_utils
 
-class DeviceLicense(models.Model):
-    _name = 'device.license'
-    _inherit = ['mail.thread']
-    _description = 'Device License'
-    _order = 'create_date desc'
+class License(models.Model):
+    _name = 'license.license'
+    _description = 'License'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _order = 'name desc'
 
-    name = fields.Char('License Name', required=True, tracking=True)
-    key = fields.Char('License Key', required=True, copy=False, tracking=True)
-    password = fields.Char('Password', copy=False, tracking=True)
-    state = fields.Selection([
-        ('new', 'New'),
-        ('active', 'Active'),
-        ('expired', 'Expired'),
-        ('revoked', 'Revoked'),
-    ], default='new')
-    
-    create_date = fields.Datetime('Ngày tạo', readonly=True, tracking=True)
-    activation_date = fields.Datetime('Ngày kích hoạt', tracking=True)
-    expired_date = fields.Date('Ngày hết hạn', tracking=True)
-    
-    device_code = fields.Char('Mã thiết bị', tracking=True)
-    device_name = fields.Char('Tên thiết bị', tracking=True)
-    device_info = fields.Text('Thông tin thiết bị', tracking=True)
-    
-    user_id = fields.Many2one('res.users', string='Người dùng', tracking=True)
+    name = fields.Char(
+        string='Reference',
+        required=True,
+        readonly=True,
+        default=lambda self: _('New'),
+        tracking=True,
+    )
+    key = fields.Char(
+        string='License Key',
+        required=True,
+        readonly=True,
+        default=lambda self: str(uuid.uuid4()).upper(),
+        tracking=True,
+    )
 
-    @api.model
-    def create(self, vals):
-        # Tự động tạo license key nếu chưa có
-        if not vals.get('key'):
-            vals['key'] = self._generate_license_key(vals.get('device_code'))
-        # Mã hóa MD5
-        if vals.get('password'):
-            vals['password'] = self._md5_hash(vals['password'])
-        return super().create(vals)
+    device_code = fields.Char(string='Device Code', tracking=True)
+    device_name = fields.Char(string='Device Name', tracking=True)
+    password = fields.Char(string='Password', tracking=True)
 
-    def _generate_license_key(self, device_code):
-        """Sinh key dựa trên mã thiết bị và thời gian hiện tại"""
-        raw = f"{device_code or 'device'}-{datetime.utcnow().isoformat()}"
-        return hashlib.sha256(raw.encode()).hexdigest()
-    ### MD5
-    def _md5_hash(self, raw_password):
-        """Mã hóa mật khẩu bằng MD5"""
-        return hashlib.md5(raw_password.encode('utf-8')).hexdigest()
-    
+    type_id = fields.Many2one(
+        'license.type',
+        string='Type',
+        readonly=True,
+    )
+    partner_id = fields.Many2one(
+        'res.partner',
+        string='Customer',
+        required=True,
+        readonly=True,
+        tracking=True,
+    )
+    product_id = fields.Many2one(
+        'product.product',
+        string='Product',
+        readonly=True,
+        tracking=True,
+    )
+    state = fields.Selection(
+        [
+            ('draft', 'Draft'),
+            ('assigned', 'Ready'),
+            ('active', 'Active'),
+            ('disabled', 'Disabled'),
+            ('cancelled', 'Cancelled'),
+        ],
+        string='Status',
+        default='draft',
+        tracking=True,
+        copy=False,
+    )
+    date_start = fields.Date(string='Start Date', tracking=True)
+    runtime = fields.Float(string='Runtime (Months)', default=12)
+    date_end = fields.Date(
+        string='End Date',
+        compute='_compute_date_end',
+        inverse='_inverse_date_end',
+        store=True,
+        tracking=True,
+    )
+
+    @api.constrains('password')
+    def _check_complex_password(self):
+        
+        pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$'
+        for rec in self:
+            if rec.password and not re.match(pattern, rec.password):
+                raise UserError(_(
+                    "Mật khẩu phải dài ít nhất 8 ký tự và bao gồm "
+                    "ít nhất một chữ cái viết hoa, một chữ cái viết thường, một số, "
+                    "và một ký tự đặc biệt."
+                ))
+
+    @api.depends('date_start', 'runtime')
+    def _compute_date_end(self):
+        for rec in self:
+            rec.date_end = (
+                date_utils.add(rec.date_start, months=rec.runtime)
+                if rec.date_start else False
+            )
+
+    def _inverse_date_end(self):
+        for rec in self:
+            if rec.date_start and rec.date_end:
+                diff = date_utils.diff(rec.date_end, rec.date_start)
+                # Chuyển đổi thành tháng (xấp xỉ ngày thành phần)
+                rec.runtime = diff.years * 12 + diff.months + diff.days / 30.0
+            else:
+                rec.runtime = 0
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            # Gán sequence cho name
+            if vals.get('name', _('New')) == _('New'):
+                vals['name'] = self.env['ir.sequence'].next_by_code('license.license') or _('New')
+            # Gán UUID cho key nếu chưa có
+            vals.setdefault('key', str(uuid.uuid4()).upper())
+        return super().create(vals_list)
+
+    def copy(self, default=None):
+        default = dict(default or {})
+        default.setdefault(
+            'name',
+            self.env['ir.sequence'].next_by_code('license.license') or _('New')
+        )
+        default.setdefault('key', str(uuid.uuid4()).upper())
+        return super().copy(default)
+
+    def action_assign(self):
+        return self.write({'state': 'assigned'})
+
     def action_activate(self):
-        """Hàm gọi khi kích hoạt license"""
-        for record in self:
-            if record.state != 'active':
-                record.state = 'active'
-                record.activation_date = datetime.utcnow()
-    ### Action "Generate Password"           
-    def action_generate_password(self):
-        for record in self:
-            # Tạo mật khẩu ngẫu nhiên
-            raw = record._generate_random_password()
-            # Mã hóa MD5 rồi gán vào field
-            record.password = record._md5_hash(raw)
-    ### Action "Generate Password"   
-    def _generate_random_password(self, length=10):
-        import secrets
-        return secrets.token_urlsafe(length)[:length]
-    ### Không cho xóa nếu đã active
+        today = fields.Date.context_today(self)
+        return self.write({
+            'state': 'active',
+            'date_start': self.date_start or today,
+        })
+
+    def action_reset(self):
+        return self.write({'state': 'assigned', 'date_start': False, 'date_end': False})
+
+    def action_disable(self):
+        today = fields.Date.context_today(self)
+        return self.write({'state': 'disabled', 'date_end': today})
+
+    def action_enable(self):
+        today = fields.Date.context_today(self)
+        return self.write({
+            'state': 'active',
+            'date_start': self.date_start or today,
+        })
+
+    def action_cancel(self):
+        today = fields.Date.context_today(self)
+        return self.write({'state': 'cancelled', 'date_end': today})
+
+    def action_draft(self):
+        return self.write({'state': 'draft', 'date_start': False, 'date_end': False})
+
     def unlink(self):
-        for record in self:
-            if record.state == 'active':
-                raise models.ValidationError("Không thể xóa license đang ở trạng thái 'active'.")
+        for rec in self:
+            if rec.state not in ('draft', 'cancelled'):
+                raise UserError(_('You cannot delete a license unless it is Draft or Cancelled.'))
         return super().unlink()
