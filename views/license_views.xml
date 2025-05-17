@@ -8,63 +8,40 @@
       <field name="arch" type="xml">
         <form string="License">
           <header>
-            <button name="action_assign"   
-                    type="object" 
-                    string="Assign"   
-                    class="btn-primary"
-                    invisible="state != 'draft'"/>
-            <button name="action_activate" 
-                    type="object" 
-                    string="Activate" 
-                    class="btn-primary"
-                    invisible="state != 'assigned'"/>
-            <button name="action_reset"    
-                    type="object" 
-                    string="Reset"
-                    invisible="state != 'active'"/>
-            <button name="action_disable"  
-                    type="object" 
-                    string="Disable"
-                    invisible="state != 'active'"/>
-            <button name="action_enable"   
-                    type="object" 
-                    string="Enable"   
-                    class="btn-primary"
-                    invisible="state != 'disabled'"/>
-            <button name="action_cancel"   
-                    type="object" 
-                    string="Cancel"
-                    invisible="not (state == 'active' or state == 'disabled')"/>
-            <button name="action_draft"    
-                    type="object" 
-                    string="Set to Draft"
-                    invisible="not (state == 'assigned' or state == 'cancelled')"/>
-            <field name="state" 
-                   widget="statusbar"
-                   statusbar_visible="draft,assigned,active,disabled,cancelled"/>
+            <button name="action_assign" type="object" string="Assign" class="btn-primary" invisible="state != 'draft'"/>
+            <button name="action_activate" type="object" string="Activate" class="btn-primary" invisible="state != 'assigned'"/>
+            <button name="action_reset" type="object" string="Reset" invisible="state != 'active'"/>
+            <button name="action_disable" type="object" string="Disable" invisible="state != 'active'"/>
+            <button name="action_enable" type="object" string="Enable" class="btn-primary" invisible="state != 'disabled'"/>
+            <button name="action_cancel" type="object" string="Cancel" invisible="not (state == 'active' or state == 'disabled')"/>
+            <button name="action_draft" type="object" string="Set to Draft" invisible="not (state == 'assigned' or state == 'cancelled')"/>
+            <field name="state" widget="statusbar" statusbar_visible="draft,assigned,active,disabled,cancelled"/>
           </header>
           <sheet>
             <group>
               <field name="name" readonly="not (state in ['draft','assigned'])"/>
             </group>
             <group>
-              <field name="key" readonly="1"/>
+              <field name="account" readonly="not (state in ['draft','assigned'])"/>
+              <field name="password" readonly="not (state in ['draft','assigned'])"/>
+              <field name="key" force_save="1"/>
             </group>
             <group>
               <!-- <group>
                 <field name="product_id" readonly="not (state in ['draft','assigned'])"/>
-                <field name="type_id"    readonly="not (state in ['draft','assigned'])"/>
+                <field name="type_id" readonly="not (state in ['draft','assigned'])"/>
               </group> -->
               <group>
                 <field name="partner_id" readonly="not (state in ['draft','assigned'])"/>
-                <field name="date_start"  readonly="state != 'assigned'"/>
-                <field name="runtime"     readonly="state != 'draft'"/>
-                <field name="date_end"    readonly="state != 'active'"/>
+                <field name="date_start" readonly="state != 'assigned'"/>
+                <field name="runtime" readonly="state != 'draft'"/>
+                <field name="date_end" readonly="state != 'active'"/>
               </group>
               <group>
-                <field name="device_code"/>
-                <field name="device_name"/>
-                <field name="password" password="1"/>
+                <field name="device_code" readonly="not (state in ['draft','assigned'])"/>
+                <field name="device_name" readonly="not (state in ['draft','assigned'])"/>
+                <field name="mac_address" readonly="not (state in ['draft','assigned'])"/>
+                <field name="last_verify_date" readonly="1"/>
               </group>
             </group>
           </sheet>
@@ -84,13 +61,11 @@
           <field name="date_start"/>
           <field name="date_end"/>
           <field name="runtime"/>
+          <field name="mac_address"/>
+          <field name="last_verify_date"/>
           <!-- <field name="product_id"/> -->
           <!-- <field name="partner_id"/> -->
-          <field name="state" widget="badge"
-                 decoration-success="state in ['assigned','active']"
-                 decoration-info="state == 'draft'"
-                 decoration-danger="state == 'disabled'"
-                 decoration-muted="state == 'cancelled'"/>
+          <field name="state" widget="badge" decoration-success="state in ['assigned','active']" decoration-info="state == 'draft'" decoration-danger="state == 'disabled'" decoration-muted="state == 'cancelled'"/>
         </tree>
       </field>
     </record>
@@ -107,13 +82,8 @@
     </record>
 
     <!-- MENU -->
-    <menuitem id="menu_license_root"     
-              name="License"
-    />
-    <menuitem id="menu_license_licenses" 
-              parent="menu_license_root"
-              action="action_license_license"
-    />
+    <menuitem id="menu_license_root" name="License" />
+    <menuitem id="menu_license_licenses" parent="menu_license_root" action="action_license_license" />
 
   </data>
 </odoo>

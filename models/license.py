@@ -1,8 +1,10 @@
+
 import uuid
-import re
+import re, random, string
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
-from odoo.tools import date_utils
+from dateutil.relativedelta import relativedelta
+
 
 class License(models.Model):
     _name = 'license.license'
@@ -10,24 +12,34 @@ class License(models.Model):
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'name desc'
 
+    _sql_constraints = [
+        ('key_uniq', 'UNIQUE (key)', 'Key is duplicated !')
+    ]
+
     name = fields.Char(
-        string='Reference',
+        string='Reference ',
         required=True,
         readonly=True,
         default=lambda self: _('New'),
         tracking=True,
     )
     key = fields.Char(
-        string='License Key',
-        required=True,
-        readonly=True,
-        default=lambda self: str(uuid.uuid4()).upper(),
+        default=lambda self: _("New"),
+        compute="_compute_key",
         tracking=True,
+        required=True,
+        store=True,
+        # states={"draft": [("readonly", False)]},
     )
 
-    device_code = fields.Char(string='Device Code', tracking=True)
-    device_name = fields.Char(string='Device Name', tracking=True)
-    password = fields.Char(string='Password', tracking=True)
+    device_code = fields.Char(string='Device Code ', tracking=True)
+    device_name = fields.Char(string='Device Name ', tracking=True)
+    ###
+    mac_address = fields.Char(string='MAC Address', tracking=True)
+    last_verify_date = fields.Datetime(string='Last Verify Time', tracking=True)
+    ###
+    account = fields.Char(string='Account', required=True, tracking=True)
+    password = fields.Char(string='Password ', tracking=True, required=True, default=lambda self: self.generate_strong_password())
 
     type_id = fields.Many2one(
         'license.type',
@@ -36,8 +48,7 @@ class License(models.Model):
     )
     partner_id = fields.Many2one(
         'res.partner',
-        string='Customer',
-        required=True,
+        string='Customer ',
         readonly=True,
         tracking=True,
     )
@@ -60,8 +71,18 @@ class License(models.Model):
         tracking=True,
         copy=False,
     )
-    date_start = fields.Date(string='Start Date', tracking=True)
-    runtime = fields.Float(string='Runtime (Months)', default=12)
+    # date_start = fields.Date(string='Start Date', tracking=True)
+    date_start = fields.Date(
+        string='Start Date', 
+        tracking=True,
+    )
+
+    # runtime = fields.Float(string='Runtime (Months) ', default=12)
+    runtime = fields.Float(
+        string='Runtime (Months)',
+        default=12, 
+    )
+
     date_end = fields.Date(
         string='End Date',
         compute='_compute_date_end',
@@ -82,20 +103,39 @@ class License(models.Model):
                     "và một ký tự đặc biệt."
                 ))
 
+    def generate_strong_password(self, length=12):
+        if length < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        
+        lowercase = random.choice(string.ascii_lowercase)
+        uppercase = random.choice(string.ascii_uppercase)
+        digit = random.choice(string.digits)
+        special = random.choice("!@#$%^&*()-_=+[]{}|;:,.<>?")
+
+        others = ''.join(random.choices(
+            string.ascii_letters + string.digits + "!@#$%^&*()-_=+[]{}|;:,.<>?",
+            k=length - 4
+        ))
+
+        password = list(lowercase + uppercase + digit + special + others)
+        random.shuffle(password)
+        return ''.join(password)
+ 
     @api.depends('date_start', 'runtime')
     def _compute_date_end(self):
         for rec in self:
-            rec.date_end = (
-                date_utils.add(rec.date_start, months=rec.runtime)
-                if rec.date_start else False
-            )
+            if rec.date_start and rec.runtime:
+                months = int(rec.runtime)
+                days = int((rec.runtime - months) * 30)
+                rec.date_end = rec.date_start + relativedelta(months=months, days=days)
+            else:
+                rec.date_end = False
 
     def _inverse_date_end(self):
         for rec in self:
             if rec.date_start and rec.date_end:
-                diff = date_utils.diff(rec.date_end, rec.date_start)
-                # Chuyển đổi thành tháng (xấp xỉ ngày thành phần)
-                rec.runtime = diff.years * 12 + diff.months + diff.days / 30.0
+                delta = relativedelta(rec.date_end, rec.date_start)
+                rec.runtime = delta.years * 12 + delta.months + delta.days / 30.0
             else:
                 rec.runtime = 0
 
@@ -105,8 +145,6 @@ class License(models.Model):
             # Gán sequence cho name
             if vals.get('name', _('New')) == _('New'):
                 vals['name'] = self.env['ir.sequence'].next_by_code('license.license') or _('New')
-            # Gán UUID cho key nếu chưa có
-            vals.setdefault('key', str(uuid.uuid4()).upper())
         return super().create(vals_list)
 
     def copy(self, default=None):
@@ -115,8 +153,12 @@ class License(models.Model):
             'name',
             self.env['ir.sequence'].next_by_code('license.license') or _('New')
         )
-        default.setdefault('key', str(uuid.uuid4()).upper())
         return super().copy(default)
+
+    @api.depends("create_date")
+    def _compute_key(self):
+        for license in self.filtered(lambda r: r.key == _("New")):
+            license.key = str(uuid.uuid4()).upper()
 
     def action_assign(self):
         return self.write({'state': 'assigned'})

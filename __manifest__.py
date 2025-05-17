@@ -6,6 +6,7 @@
     'data': [   
         'security/ir.model.access.csv',
         'views/license_views.xml',
+        'data/ir_sequence.xml',
     ],     
     'license': 'LGPL-3',
     'installable': True,
